@@ -148,7 +148,7 @@ with tab3:
                 nombre = st.text_input(
                     "Nombre de la metodología",
                     value=existente["nombre"] if existente else "",
-                    placeholder="ej: Dormitorio principal",
+                    placeholder="ej: Gas trazador",
                 )
                 texto = st.text_area(
                     "Texto de la metodología",
@@ -209,16 +209,18 @@ with tab4:
             "Zona Afectada":  pd.Series([], dtype=str),
             "Ubicación":      pd.Series([], dtype=str),
             "Daño Observado": pd.Series([], dtype=str),
-            "Superficie m²":  pd.Series([], dtype=str),
+            "Superficie":     pd.Series([], dtype=str),
+            "Unidad":         pd.Series([], dtype=str),
         })
     else:
-        st.caption("Una fila por cada daño.")
+        st.caption("Una fila por cada daño. La unidad aplica a todos los valores de superficie de esa fila.")
         danos_df = st.data_editor(
             pd.DataFrame({
                 "Zona Afectada":  pd.Series([], dtype=str),
                 "Ubicación":      pd.Series([], dtype=str),
                 "Daño Observado": pd.Series([], dtype=str),
-                "Superficie m²":  pd.Series([], dtype=str),
+                "Superficie":     pd.Series([], dtype=str),
+                "Unidad":         pd.Series(["m²"], dtype=str),
             }),
             num_rows="dynamic",
             use_container_width=True,
@@ -226,7 +228,13 @@ with tab4:
                 "Zona Afectada":  st.column_config.TextColumn(width="medium"),
                 "Ubicación":      st.column_config.TextColumn(width="medium"),
                 "Daño Observado": st.column_config.TextColumn(width="large"),
-                "Superficie m²":  st.column_config.TextColumn(width="small"),
+                "Superficie":     st.column_config.TextColumn("Superficie", width="small"),
+                "Unidad":         st.column_config.SelectboxColumn(
+                    "Unidad",
+                    options=["m²", "m", "sin unidad"],
+                    default="m²",
+                    width="small",
+                ),
             },
             key="danos_editor",
         )
@@ -315,16 +323,22 @@ with tab6:
                 filas_validas = danos_df.dropna(subset=["Zona Afectada"]).copy()
                 filas_validas = filas_validas[filas_validas["Zona Afectada"].str.strip() != ""]
                 for _, row in filas_validas.iterrows():
-                    dano = str(row["Daño Observado"]).strip()
-                    sup  = str(row["Superficie m²"]).strip()
-                    if dano:
-                        if sup and not sup.endswith("m²"):
-                            sup = f"{sup} m²"
-                        danos_list.append({
-                            "zona":      str(row["Zona Afectada"]).strip(),
-                            "ubicacion": str(row["Ubicación"]).strip(),
-                            "items":     [{"dano": dano, "superficie": sup or "—"}],
-                        })
+                    zona   = str(row["Zona Afectada"]).strip()
+                    ubic   = str(row["Ubicación"]).strip()
+                    unidad = str(row.get("Unidad", "m²")).strip()
+                    dano_lines = [l.strip() for l in str(row["Daño Observado"]).split("\n") if l.strip()]
+                    sup_lines  = [l.strip() for l in str(row["Superficie"]).split("\n")     if l.strip()]
+                    if not dano_lines:
+                        continue
+                    items = []
+                    for idx, d_line in enumerate(dano_lines):
+                        s_val = sup_lines[idx] if idx < len(sup_lines) else ""
+                        if s_val:
+                            s_line = s_val if unidad == "sin unidad" else f"{s_val} {unidad}"
+                        else:
+                            s_line = "—"
+                        items.append({"dano": d_line, "superficie": s_line})
+                    danos_list.append({"zona": zona, "ubicacion": ubic, "items": items})
 
             with st.spinner("Descargando fotos y generando reporte…"):
                 try:

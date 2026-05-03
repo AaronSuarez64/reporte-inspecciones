@@ -179,45 +179,44 @@ def generar_documento(
         i, total = 0, len(imagenes_data)
         while i < total:
             if i + 1 < total:
-                tbl = doc.add_table(rows=2, cols=2)
+                # Foto y pie de foto en la misma celda → nunca se separan
+                tbl = doc.add_table(rows=1, cols=2)
                 tbl.style = "Table Grid"
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
                 tbl.autofit = False
                 for j in range(2):
                     cell = tbl.rows[0].cells[j]
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                    p = cell.paragraphs[0]
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    # Foto
+                    p_img = cell.paragraphs[0]
+                    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     img_buf = imagenes_data[i + j]["bytes"]
                     img_buf.seek(0)
-                    # height fijo para garantizar al menos 4 fotos por página
-                    p.add_run().add_picture(img_buf, height=Inches(3.2))
-                for j in range(2):
+                    p_img.add_run().add_picture(img_buf, height=Inches(3.2))
+                    # Pie de foto en la misma celda
                     desc = imagenes_data[i + j]["descripcion"].replace("_", " ").capitalize()
-                    cell = tbl.rows[1].cells[j]
-                    cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                    p = cell.paragraphs[0]
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    p.add_run(f"Imagen {i + j + 1}: {desc}").italic = True
+                    p_cap = cell.add_paragraph()
+                    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p_cap.add_run(f"Imagen {i + j + 1}: {desc}").italic = True
                 i += 2
             else:
-                tbl = doc.add_table(rows=2, cols=1)
+                tbl = doc.add_table(rows=1, cols=1)
                 tbl.style = "Table Grid"
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
                 tbl.autofit = False
                 cell = tbl.rows[0].cells[0]
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                # Foto
+                p_img = cell.paragraphs[0]
+                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 img_buf = imagenes_data[i]["bytes"]
                 img_buf.seek(0)
-                p.add_run().add_picture(img_buf, height=Inches(4.0))
+                p_img.add_run().add_picture(img_buf, height=Inches(4.0))
+                # Pie de foto en la misma celda
                 desc = imagenes_data[i]["descripcion"].replace("_", " ").capitalize()
-                cell = tbl.rows[1].cells[0]
-                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.add_run(f"Imagen {i + 1}: {desc}").italic = True
+                p_cap = cell.add_paragraph()
+                p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_cap.add_run(f"Imagen {i + 1}: {desc}").italic = True
                 i += 1
             doc.add_paragraph("")
 
