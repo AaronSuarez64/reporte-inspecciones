@@ -11,7 +11,7 @@ def _init_state():
     defaults = {
         "datos_excel":    None,
         "dir_editada":    "",
-        "inspecciones":   [],
+        "detecciones":    [],
         "edit_insp_idx":  None,
         "danos_grupos":   [],
         "edit_dano_idx":  None,
@@ -57,7 +57,7 @@ st.markdown(
 # ── Pestañas ─────────────────────────────────────────────────────────────────
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-    ["  1. Datos  ", "  2. Visita  ", "  3. Inspección  ", "  4. Daños  ", "  5. Observaciones  ", "  Generar Reporte  "]
+    ["  1. Datos  ", "  2. Visita  ", "  3. Detección  ", "  4. Daños  ", "  5. Observaciones  ", "  Generar Reporte  "]
 )
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -115,26 +115,26 @@ with tab2:
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 with tab3:
-    hay_inspeccion = st.checkbox("Se realizó inspección técnica")
+    hay_deteccion = st.checkbox("Se realizó detección")
 
-    if hay_inspeccion:
+    if hay_deteccion:
         st.divider()
-        inspecciones = st.session_state.inspecciones
+        detecciones = st.session_state.detecciones
 
-        if inspecciones:
+        if detecciones:
             st.markdown("**Metodologías agregadas:**")
-            for i, insp in enumerate(inspecciones):
+            for i, insp in enumerate(detecciones):
                 col_n, col_e, col_d = st.columns([7, 1, 1])
                 col_n.write(f"**{i + 1}. {insp['nombre']}**")
                 if col_e.button("✎", key=f"edit_{i}", help="Editar"):
                     st.session_state.edit_insp_idx = i
                     st.rerun()
                 if col_d.button("✕", key=f"del_{i}", help="Eliminar"):
-                    inspecciones.pop(i)
-                    st.session_state.inspecciones = inspecciones
+                    detecciones.pop(i)
+                    st.session_state.detecciones = detecciones
                     st.rerun()
         else:
-            st.info("No hay inspecciones agregadas. Use el botón para agregar.")
+            st.info("No hay detecciones agregadas. Use el botón para agregar.")
 
         if st.button("+ Agregar metodología"):
             st.session_state.edit_insp_idx = -1
@@ -143,10 +143,10 @@ with tab3:
         edit_idx = st.session_state.edit_insp_idx
         if edit_idx is not None:
             st.divider()
-            existente = inspecciones[edit_idx] if edit_idx >= 0 else None
+            existente = detecciones[edit_idx] if edit_idx >= 0 else None
             st.subheader("Nueva metodología" if existente is None else f"Editando: {existente['nombre']}")
 
-            with st.form("form_inspeccion"):
+            with st.form("form_deteccion"):
                 nombre = st.text_input(
                     "Nombre de la metodología",
                     value=existente["nombre"] if existente else "",
@@ -186,10 +186,10 @@ with tab3:
                     ]
                     data = {"nombre": nombre.strip(), "texto": texto, "dimensiones": dims}
                     if edit_idx == -1:
-                        inspecciones.append(data)
+                        detecciones.append(data)
                     else:
-                        inspecciones[edit_idx] = data
-                    st.session_state.inspecciones = inspecciones
+                        detecciones[edit_idx] = data
+                    st.session_state.detecciones = detecciones
                     st.session_state.edit_insp_idx = None
                     st.rerun()
 
@@ -379,8 +379,8 @@ with tab6:
                     docx_buf = generar_documento(
                         datos          = datos,
                         detalle_visita = detalle_visita,
-                        hay_inspeccion = hay_inspeccion,
-                        inspecciones   = st.session_state.inspecciones,
+                        hay_inspeccion = hay_deteccion,
+                        inspecciones   = st.session_state.detecciones,
                         sin_danos      = sin_danos,
                         danos          = danos_list,
                         observaciones  = st.session_state.observaciones,
