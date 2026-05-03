@@ -13,6 +13,8 @@ def _init_state():
         "dir_editada":    "",
         "inspecciones":   [],
         "edit_insp_idx":  None,
+        "danos_grupos":   [],
+        "edit_dano_idx":  None,
         "observaciones":  [],
         "edit_obs_idx":   None,
         "docx_bytes":     None,
@@ -205,39 +207,72 @@ with tab4:
 
     if sin_danos:
         st.info("Se incluirá en el informe: «No se observan daños en el inmueble.»")
-        danos_df = pd.DataFrame({
-            "Zona Afectada":  pd.Series([], dtype=str),
-            "Ubicación":      pd.Series([], dtype=str),
-            "Daño Observado": pd.Series([], dtype=str),
-            "Superficie":     pd.Series([], dtype=str),
-            "Unidad":         pd.Series([], dtype=str),
-        })
     else:
-        st.caption("Una fila por cada daño. La unidad aplica a todos los valores de superficie de esa fila.")
-        danos_df = st.data_editor(
-            pd.DataFrame({
-                "Zona Afectada":  pd.Series([], dtype=str),
-                "Ubicación":      pd.Series([], dtype=str),
-                "Daño Observado": pd.Series([], dtype=str),
-                "Superficie":     pd.Series([], dtype=str),
-                "Unidad":         pd.Series(["m²"], dtype=str),
-            }),
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Zona Afectada":  st.column_config.TextColumn(width="medium"),
-                "Ubicación":      st.column_config.TextColumn(width="medium"),
-                "Daño Observado": st.column_config.TextColumn(width="large"),
-                "Superficie":     st.column_config.TextColumn("Superficie", width="small"),
-                "Unidad":         st.column_config.SelectboxColumn(
-                    "Unidad",
-                    options=["m²", "m", "sin unidad"],
-                    default="m²",
-                    width="small",
-                ),
-            },
-            key="danos_editor",
-        )
+        grupos = st.session_state.danos_grupos
+
+        # ── Mostrar grupos existentes ───────────────────────────────────────
+        for gi, grupo in enumerate(grupos):
+            with st.expander(f"**{grupo['zona']}** — {grupo['ubicacion']}", expanded=True):
+
+                # Editar zona/ubicación
+                edit_dano_idx = st.session_state.edit_dano_idx
+                if edit_dano_idx == gi:
+                    with st.form(f"form_edit_zona_{gi}"):
+                        c1, c2 = st.columns(2)
+                        nueva_zona = c1.text_input("Zona Afectada", value=grupo["zona"])
+                        nueva_ubic = c2.text_input("Ubicación",     value=grupo["ubicacion"])
+                        cg, cc = st.columns(2)
+                        if cg.form_submit_button("Guardar", type="primary"):
+                            grupos[gi]["zona"]     = nueva_zona.strip()
+                            grupos[gi]["ubicacion"] = nueva_ubic.strip()
+                            st.session_state.edit_dano_idx = None
+                            st.rerun()
+                        if cc.form_submit_button("Cancelar"):
+                            st.session_state.edit_dano_idx = None
+                            st.rerun()
+
+                # Listar ítems del grupo
+                for ii, item in enumerate(grupo["items"]):
+                    sup_display = f"{item['superficie']} {item['unidad']}" if item['unidad'] != "sin unidad" and item['superficie'] else item['superficie'] or "—"
+                    col_t, col_d = st.columns([9, 1])
+                    col_t.write(f"• {item['dano']}  —  {sup_display}")
+                    if col_d.button("✕", key=f"del_item_{gi}_{ii}"):
+                        grupo["items"].pop(ii)
+                        st.rerun()
+
+                # Agregar ítem al grupo
+                with st.form(f"form_item_{gi}", clear_on_submit=True):
+                    c1, c2, c3 = st.columns([4, 2, 2])
+                    new_dano = c1.text_input("Daño observado",  label_visibility="collapsed", placeholder="Daño observado")
+                    new_sup  = c2.text_input("Superficie",      label_visibility="collapsed", placeholder="Superficie")
+                    new_unit = c3.selectbox("Unidad", ["m²", "m", "sin unidad"], label_visibility="collapsed")
+                    if st.form_submit_button("+ Agregar daño"):
+                        if new_dano.strip():
+                            grupo["items"].append({"dano": new_dano.strip(), "superficie": new_sup.strip(), "unidad": new_unit})
+                            st.rerun()
+
+                # Botones del grupo
+                cb1, cb2 = st.columns(2)
+                if cb1.button("✎ Editar zona/ubicación", key=f"edit_grupo_{gi}"):
+                    st.session_state.edit_dano_idx = gi
+                    st.rerun()
+                if cb2.button("✕ Eliminar zona", key=f"del_grupo_{gi}"):
+                    grupos.pop(gi)
+                    st.session_state.danos_grupos = grupos
+                    st.rerun()
+
+        # ── Agregar nueva zona ──────────────────────────────────────────────
+        st.divider()
+        with st.form("form_nueva_zona", clear_on_submit=True):
+            st.markdown("**Agregar nueva zona**")
+            c1, c2 = st.columns(2)
+            nueva_zona = c1.text_input("Zona Afectada", placeholder="ej: Muro")
+            nueva_ubic = c2.text_input("Ubicación",     placeholder="ej: Baño principal")
+            if st.form_submit_button("+ Agregar zona"):
+                if nueva_zona.strip():
+                    grupos.append({"zona": nueva_zona.strip(), "ubicacion": nueva_ubic.strip(), "items": []})
+                    st.session_state.danos_grupos = grupos
+                    st.rerun()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # PESTAÑA 5 – Observaciones
@@ -320,25 +355,15 @@ with tab6:
 
             danos_list = []
             if not sin_danos:
-                filas_validas = danos_df.dropna(subset=["Zona Afectada"]).copy()
-                filas_validas = filas_validas[filas_validas["Zona Afectada"].str.strip() != ""]
-                for _, row in filas_validas.iterrows():
-                    zona   = str(row["Zona Afectada"]).strip()
-                    ubic   = str(row["Ubicación"]).strip()
-                    unidad = str(row.get("Unidad", "m²")).strip()
-                    dano_lines = [l.strip() for l in str(row["Daño Observado"]).split("\n") if l.strip()]
-                    sup_lines  = [l.strip() for l in str(row["Superficie"]).split("\n")     if l.strip()]
-                    if not dano_lines:
-                        continue
+                for grupo in st.session_state.danos_grupos:
                     items = []
-                    for idx, d_line in enumerate(dano_lines):
-                        s_val = sup_lines[idx] if idx < len(sup_lines) else ""
-                        if s_val:
-                            s_line = s_val if unidad == "sin unidad" else f"{s_val} {unidad}"
-                        else:
-                            s_line = "—"
-                        items.append({"dano": d_line, "superficie": s_line})
-                    danos_list.append({"zona": zona, "ubicacion": ubic, "items": items})
+                    for item in grupo["items"]:
+                        sup = item["superficie"]
+                        if sup and item["unidad"] != "sin unidad":
+                            sup = f"{sup} {item['unidad']}"
+                        items.append({"dano": item["dano"], "superficie": sup or "—"})
+                    if items:
+                        danos_list.append({"zona": grupo["zona"], "ubicacion": grupo["ubicacion"], "items": items})
 
             with st.spinner("Descargando fotos y generando reporte…"):
                 try:
