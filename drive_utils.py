@@ -91,13 +91,14 @@ class OneDriveClient:
         imagenes = []
         for f in archivos:
             nombre = f["name"].lower()
-            if nombre.endswith((".jpg", ".jpeg", ".png")):
-                match = re.match(r"(.+?)_(\d+(?:\.\d+)?)\.(jpg|jpeg|png)", nombre)
+            if nombre.endswith((".jpg", ".jpeg", ".png", ".heic")):
+                match = re.match(r"(.+?)_(\d+(?:\.\d+)?)\.(jpg|jpeg|png|heic)", nombre)
                 if match:
                     imagenes.append({
                         "descripcion": match.group(1),
                         "posicion":    float(match.group(2)),
                         "item_id":     f["id"],
+                        "extension":   match.group(3),
                     })
         imagenes.sort(key=lambda x: x["posicion"])
         return imagenes, None

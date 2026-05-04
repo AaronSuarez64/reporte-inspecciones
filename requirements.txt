@@ -3,3 +3,5 @@ pandas
 python-docx
 openpyxl
 requests
+pillow-heif
+Pillow
