@@ -15,6 +15,7 @@ def _init_state():
         "edit_insp_idx":  None,
         "danos_grupos":   [],
         "edit_dano_idx":  None,
+        "zona_form_v":    0,
         "observaciones":  [],
         "edit_obs_idx":   None,
         "docx_bytes":     None,
@@ -286,6 +287,7 @@ with tab4:
                         "Unidad", options=["m²", "m", "sin unidad"], default="m²", width="small"
                     ),
                 },
+                key=f"items_editor_{st.session_state.zona_form_v}",
             )
 
             if st.form_submit_button("+ Agregar zona", type="primary"):
@@ -299,6 +301,7 @@ with tab4:
                             items.append({"dano": dano, "superficie": sup, "unidad": unit})
                     grupos.append({"zona": nueva_zona.strip(), "ubicacion": nueva_ubic.strip(), "items": items})
                     st.session_state.danos_grupos = grupos
+                    st.session_state.zona_form_v += 1
                     st.rerun()
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
