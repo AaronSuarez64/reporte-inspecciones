@@ -180,9 +180,12 @@ with tab3:
                     st.warning("Ingrese el nombre del espacio.")
                 else:
                     dims = [
-                        {"titulo": row["titulo"], "texto": row["texto"] or ""}
+                        {
+                            "titulo": str(row["titulo"]).strip(),
+                            "texto":  "" if pd.isna(row["texto"]) else str(row["texto"]).strip(),
+                        }
                         for _, row in dims_editor.iterrows()
-                        if row["titulo"]
+                        if pd.notna(row["titulo"]) and str(row["titulo"]).strip()
                     ]
                     data = {"nombre": nombre.strip(), "texto": texto, "dimensiones": dims}
                     if edit_idx == -1:
@@ -215,43 +218,41 @@ with tab4:
             with st.expander(f"**{grupo['zona']}** — {grupo['ubicacion']}", expanded=True):
 
                 # Editar zona/ubicación
-                edit_dano_idx = st.session_state.edit_dano_idx
-                if edit_dano_idx == gi:
+                if st.session_state.edit_dano_idx == gi:
                     with st.form(f"form_edit_zona_{gi}"):
                         c1, c2 = st.columns(2)
-                        nueva_zona = c1.text_input("Zona Afectada", value=grupo["zona"])
-                        nueva_ubic = c2.text_input("Ubicación",     value=grupo["ubicacion"])
+                        nz = c1.text_input("Zona Afectada", value=grupo["zona"])
+                        nu = c2.text_input("Ubicación",     value=grupo["ubicacion"])
                         cg, cc = st.columns(2)
                         if cg.form_submit_button("Guardar", type="primary"):
-                            grupos[gi]["zona"]     = nueva_zona.strip()
-                            grupos[gi]["ubicacion"] = nueva_ubic.strip()
+                            grupos[gi]["zona"]      = nz.strip()
+                            grupos[gi]["ubicacion"] = nu.strip()
                             st.session_state.edit_dano_idx = None
                             st.rerun()
                         if cc.form_submit_button("Cancelar"):
                             st.session_state.edit_dano_idx = None
                             st.rerun()
 
-                # Listar ítems del grupo
+                # Ítems existentes
                 for ii, item in enumerate(grupo["items"]):
-                    sup_display = f"{item['superficie']} {item['unidad']}" if item['unidad'] != "sin unidad" and item['superficie'] else item['superficie'] or "—"
+                    sup_d = f"{item['superficie']} {item['unidad']}" if item["unidad"] != "sin unidad" and item["superficie"] else item["superficie"] or "—"
                     col_t, col_d = st.columns([9, 1])
-                    col_t.write(f"• {item['dano']}  —  {sup_display}")
+                    col_t.write(f"• {item['dano']}  —  {sup_d}")
                     if col_d.button("✕", key=f"del_item_{gi}_{ii}"):
                         grupo["items"].pop(ii)
                         st.rerun()
 
-                # Agregar ítem al grupo
+                # Agregar ítem inline
                 with st.form(f"form_item_{gi}", clear_on_submit=True):
                     c1, c2, c3 = st.columns([4, 2, 2])
-                    new_dano = c1.text_input("Daño observado",  label_visibility="collapsed", placeholder="Daño observado")
-                    new_sup  = c2.text_input("Superficie",      label_visibility="collapsed", placeholder="Superficie")
-                    new_unit = c3.selectbox("Unidad", ["m²", "m", "sin unidad"], label_visibility="collapsed")
+                    nd = c1.text_input("Daño",       label_visibility="collapsed", placeholder="Daño observado")
+                    ns = c2.text_input("Superficie",  label_visibility="collapsed", placeholder="Superficie")
+                    nu = c3.selectbox("Unidad", ["m²", "m", "sin unidad"], label_visibility="collapsed")
                     if st.form_submit_button("+ Agregar daño"):
-                        if new_dano.strip():
-                            grupo["items"].append({"dano": new_dano.strip(), "superficie": new_sup.strip(), "unidad": new_unit})
+                        if nd.strip():
+                            grupo["items"].append({"dano": nd.strip(), "superficie": ns.strip(), "unidad": nu})
                             st.rerun()
 
-                # Botones del grupo
                 cb1, cb2 = st.columns(2)
                 if cb1.button("✎ Editar zona/ubicación", key=f"edit_grupo_{gi}"):
                     st.session_state.edit_dano_idx = gi
@@ -261,16 +262,42 @@ with tab4:
                     st.session_state.danos_grupos = grupos
                     st.rerun()
 
-        # ── Agregar nueva zona ──────────────────────────────────────────────
+        # ── Agregar nueva zona (zona + daños en un solo formulario) ─────────
         st.divider()
+        st.markdown("**Agregar nueva zona**")
         with st.form("form_nueva_zona", clear_on_submit=True):
-            st.markdown("**Agregar nueva zona**")
             c1, c2 = st.columns(2)
             nueva_zona = c1.text_input("Zona Afectada", placeholder="ej: Muro")
             nueva_ubic = c2.text_input("Ubicación",     placeholder="ej: Baño principal")
-            if st.form_submit_button("+ Agregar zona"):
+
+            st.caption("Daños de esta zona (agrega las filas que necesites):")
+            items_df = st.data_editor(
+                pd.DataFrame({
+                    "Daño Observado": pd.Series([""], dtype=str),
+                    "Superficie":     pd.Series([""], dtype=str),
+                    "Unidad":         pd.Series(["m²"], dtype=str),
+                }),
+                num_rows="dynamic",
+                use_container_width=True,
+                column_config={
+                    "Daño Observado": st.column_config.TextColumn(width="large"),
+                    "Superficie":     st.column_config.TextColumn(width="small"),
+                    "Unidad":         st.column_config.SelectboxColumn(
+                        "Unidad", options=["m²", "m", "sin unidad"], default="m²", width="small"
+                    ),
+                },
+            )
+
+            if st.form_submit_button("+ Agregar zona", type="primary"):
                 if nueva_zona.strip():
-                    grupos.append({"zona": nueva_zona.strip(), "ubicacion": nueva_ubic.strip(), "items": []})
+                    items = []
+                    for _, row in items_df.iterrows():
+                        dano = "" if pd.isna(row["Daño Observado"]) else str(row["Daño Observado"]).strip()
+                        if dano and dano != "nan":
+                            sup  = "" if pd.isna(row["Superficie"]) else str(row["Superficie"]).strip()
+                            unit = "m²" if pd.isna(row["Unidad"]) else str(row["Unidad"])
+                            items.append({"dano": dano, "superficie": sup, "unidad": unit})
+                    grupos.append({"zona": nueva_zona.strip(), "ubicacion": nueva_ubic.strip(), "items": items})
                     st.session_state.danos_grupos = grupos
                     st.rerun()
 

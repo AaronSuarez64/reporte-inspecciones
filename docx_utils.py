@@ -129,7 +129,7 @@ def generar_documento(
             subt.paragraph_format.left_indent = Inches(0.25)
             subt.add_run(f"{i}. {insp['nombre']}").bold = True
 
-            for linea in insp["texto"].split("\n"):
+            for linea in str(insp.get("texto") or "").split("\n"):
                 p = doc.add_paragraph(linea)
                 p.paragraph_format.left_indent = Inches(0.5)
 
@@ -138,7 +138,7 @@ def generar_documento(
                 _keep_con_siguiente(p)
                 p.paragraph_format.left_indent = Inches(0.5)
                 p.add_run(dim["titulo"]).underline = True
-                for linea in dim["texto"].split("\n"):
+                for linea in str(dim.get("texto") or "").split("\n"):
                     pd_ = doc.add_paragraph(linea)
                     pd_.paragraph_format.left_indent = Inches(0.75)
 
