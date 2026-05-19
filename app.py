@@ -440,7 +440,9 @@ with tab6:
                     st.session_state.docx_bytes     = docx_buf.getvalue()
                     st.success("Reporte generado.")
                 except Exception as e:
-                    st.error(f"Error al generar el documento: {e}")
+                    import traceback
+                    st.error(f"Error al generar el documento: {repr(e)}")
+                    st.code(traceback.format_exc())
 
     if st.session_state.docx_bytes is not None:
         st.download_button(
