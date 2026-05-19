@@ -5,8 +5,9 @@ from drive_utils import OneDriveClient
 from docx_utils import generar_documento
 
 
-def _heic_a_jpeg(buf: io.BytesIO) -> io.BytesIO:
-    """Convierte un buffer HEIC a JPEG en memoria."""
+def _normalizar_imagen(buf: io.BytesIO) -> io.BytesIO:
+    """Re-codifica cualquier imagen a JPEG limpio.
+    Elimina EXIF problemáticos y convierte HEIC. Compatible con python-docx."""
     try:
         import pillow_heif
         from PIL import Image
@@ -421,8 +422,7 @@ with tab6:
                     imagenes_data = []
                     for img in imagenes_meta:
                         buf = client.descargar_por_id(img["item_id"])
-                        if img.get("extension", "").lower() == "heic":
-                            buf = _heic_a_jpeg(buf)
+                        buf = _normalizar_imagen(buf)
                         imagenes_data.append({"descripcion": img["descripcion"], "bytes": buf})
 
                     docx_buf = generar_documento(
