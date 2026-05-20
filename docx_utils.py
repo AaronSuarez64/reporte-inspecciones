@@ -97,6 +97,7 @@ def generar_documento(
         ("Numero de Carpeta",           "Nro_Carpeta"),
         ("Numero de Siniestro",         "Num_Siniestro"),
         ("Dirección Riesgo Asegurado",  "Dirección Riesgo Asegurado"),
+        ("Comuna",                      "Comuna"),
         ("Nombre Asegurado",            "Asegurado"),
         ("Rut Asegurado",               "Rut"),
     ]:

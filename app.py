@@ -45,20 +45,29 @@ def _init_state():
 
 _init_state()
 
-# ── Cliente OneDrive cacheado ────────────────────────────────────────────────
+# ── Clientes OneDrive cacheados ──────────────────────────────────────────────
 
 @st.cache_resource
-def _get_client() -> OneDriveClient:
+def _get_client_fotos() -> OneDriveClient:
+    """Cliente para el OneDrive de fotos."""
     return OneDriveClient(
         client_id     = st.secrets["CLIENT_ID"],
         client_secret = st.secrets["CLIENT_SECRET"],
         refresh_token = st.secrets["REFRESH_TOKEN"],
     )
 
+@st.cache_resource
+def _get_client_excel() -> OneDriveClient:
+    """Cliente para el OneDrive/SharePoint del Excel."""
+    return OneDriveClient(
+        client_id     = st.secrets["CLIENT_ID"],
+        client_secret = st.secrets["CLIENT_SECRET"],
+        refresh_token = st.secrets["REFRESH_TOKEN_EXCEL"],
+    )
+
 @st.cache_data(ttl=3600)
 def _cargar_excel(item_id: str) -> pd.DataFrame:
-    client = _get_client()
-    return client.leer_excel(item_id, "Nexus")  # cambiar "Nexus" si la hoja tiene otro nombre
+    return _get_client_excel().leer_excel(item_id, "Nexus")
 
 # ── Encabezado ───────────────────────────────────────────────────────────────
 
@@ -114,6 +123,7 @@ with tab1:
         col_a.metric("Número de Carpeta",   str(d["Nro_Carpeta"]))
         col_b.metric("Número de Siniestro", str(d["Num_Siniestro"]))
         st.text_input("Dirección ✏️ (editable)", key="dir_editada")
+        st.text_input("Comuna",             value=str(d["Comuna"]),                    disabled=True)
         st.text_input("Nombre Asegurado",   value=str(d["Asegurado"]),                 disabled=True)
         st.text_input("RUT Asegurado",      value=str(d["Rut"]),             disabled=True)
 
@@ -415,7 +425,7 @@ with tab6:
 
             with st.spinner("Descargando fotos y generando reporte…"):
                 try:
-                    client = _get_client()
+                    client = _get_client_fotos()
                     imagenes_meta, imagen_error = client.obtener_imagenes(
                         st.secrets["FOTOS_ITEM_ID"], datos["Nro_Carpeta"]
                     )
