@@ -63,7 +63,7 @@ def _get_client_excel() -> OneDriveClient:
         client_id     = st.secrets["CLIENT_ID"],
         client_secret = st.secrets["CLIENT_SECRET"],
         refresh_token = st.secrets["REFRESH_TOKEN_EXCEL"],
-        authority     = "common",
+        authority     = "1f7e4231-5559-4050-ae2b-a542dbc91d6d",
     )
 
 @st.cache_data(ttl=3600)
