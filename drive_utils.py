@@ -27,7 +27,7 @@ class OneDriveClient:
         })
         data = resp.json()
         if "access_token" not in data:
-            raise RuntimeError(f"Error al renovar token: {data.get('error_description', data)}")
+            raise RuntimeError(f"Error al renovar token: {data}")
         self._access_token = data["access_token"]
         if "refresh_token" in data:
             self._refresh_token = data["refresh_token"]
