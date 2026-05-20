@@ -24,7 +24,6 @@ class OneDriveClient:
             "client_secret": self._client_secret,
             "refresh_token": self._refresh_token,
             "grant_type":    "refresh_token",
-            "scope":         "Files.Read offline_access",
         })
         data = resp.json()
         if "access_token" not in data:
