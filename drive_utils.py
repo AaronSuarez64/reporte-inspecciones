@@ -12,8 +12,8 @@ class OneDriveClient:
     def __init__(self, client_id: str, client_secret: str, refresh_token: str,
                  authority: str = "common"):
         self._client_id     = client_id
-        self._client_secret = client_secret
-        self._refresh_token = refresh_token
+        self._client_secret = client_secret.strip()
+        self._refresh_token = refresh_token.strip()
         self._token_url     = f"https://login.microsoftonline.com/{authority}/oauth2/v2.0/token"
         self._access_token  = None
         self._renovar_token()
