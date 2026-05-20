@@ -33,6 +33,7 @@ def _init_state():
         "edit_insp_idx":  None,
         "danos_grupos":   [],
         "edit_dano_idx":  None,
+        "edit_dano_item": None,
         "zona_form_v":    0,
         "observaciones":  [],
         "edit_obs_idx":   None,
@@ -266,11 +267,39 @@ with tab4:
                 # Ítems existentes
                 for ii, item in enumerate(grupo["items"]):
                     sup_d = f"{item['superficie']} {item['unidad']}" if item["unidad"] != "sin unidad" and item["superficie"] else item["superficie"] or "—"
-                    col_t, col_d = st.columns([9, 1])
+                    col_t, col_e, col_d = st.columns([8, 1, 1])
                     col_t.write(f"• {item['dano']}  —  {sup_d}")
+                    if col_e.button("✎", key=f"edit_item_{gi}_{ii}"):
+                        st.session_state.edit_dano_item = (gi, ii)
+                        st.rerun()
                     if col_d.button("✕", key=f"del_item_{gi}_{ii}"):
                         grupo["items"].pop(ii)
+                        if st.session_state.edit_dano_item == (gi, ii):
+                            st.session_state.edit_dano_item = None
                         st.rerun()
+
+                # Formulario de edición de ítem
+                edit_dano_item = st.session_state.edit_dano_item
+                if edit_dano_item is not None and edit_dano_item[0] == gi:
+                    _, eii = edit_dano_item
+                    if eii < len(grupo["items"]):
+                        item_ed = grupo["items"][eii]
+                        st.divider()
+                        with st.form(f"form_edit_item_{gi}_{eii}"):
+                            c1, c2, c3 = st.columns([4, 2, 2])
+                            nd = c1.text_input("Daño",      value=item_ed["dano"])
+                            ns = c2.text_input("Superficie", value=item_ed["superficie"])
+                            opciones = ["m²", "m", "sin unidad"]
+                            idx_u = opciones.index(item_ed["unidad"]) if item_ed["unidad"] in opciones else 0
+                            nu = c3.selectbox("Unidad", opciones, index=idx_u)
+                            cg, cc = st.columns(2)
+                            if cg.form_submit_button("Guardar", type="primary"):
+                                grupo["items"][eii] = {"dano": nd.strip(), "superficie": ns.strip(), "unidad": nu}
+                                st.session_state.edit_dano_item = None
+                                st.rerun()
+                            if cc.form_submit_button("Cancelar"):
+                                st.session_state.edit_dano_item = None
+                                st.rerun()
 
                 # Agregar ítem inline
                 with st.form(f"form_item_{gi}", clear_on_submit=True):
