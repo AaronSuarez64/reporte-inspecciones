@@ -1,7 +1,7 @@
 import io
 import streamlit as st
 import pandas as pd
-from drive_utils import OneDriveClient
+from drive_utils import OneDriveClient, SharePointAppClient
 from docx_utils import generar_documento
 
 
@@ -57,18 +57,18 @@ def _get_client_fotos() -> OneDriveClient:
     )
 
 @st.cache_resource
-def _get_client_excel() -> OneDriveClient:
-    """Cliente para el OneDrive/SharePoint del Excel (cuenta corporativa)."""
-    return OneDriveClient(
+def _get_client_excel() -> SharePointAppClient:
+    """Cliente de aplicación para SharePoint de Nexus (sin refresh token)."""
+    return SharePointAppClient(
         client_id     = st.secrets["CLIENT_ID"],
         client_secret = st.secrets["CLIENT_SECRET"],
-        refresh_token = st.secrets["REFRESH_TOKEN_EXCEL"],
-        authority     = "1f7e4231-5559-4050-ae2b-a542dbc91d6d",
     )
 
 @st.cache_data(ttl=3600)
 def _cargar_excel(item_id: str) -> pd.DataFrame:
-    return _get_client_excel().leer_excel(item_id, "Nexus")
+    return _get_client_excel().leer_excel(
+        st.secrets["EXCEL_USER"], item_id, "Nexus"
+    )
 
 # ── Encabezado ───────────────────────────────────────────────────────────────
 

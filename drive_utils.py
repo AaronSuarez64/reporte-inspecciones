@@ -3,7 +3,47 @@ import re
 import requests
 import pandas as pd
 
-GRAPH_URL = "https://graph.microsoft.com/v1.0"
+GRAPH_URL  = "https://graph.microsoft.com/v1.0"
+NEXUS_TENANT = "1f7e4231-5559-4050-ae2b-a542dbc91d6d"
+
+
+class SharePointAppClient:
+    """Cliente con credenciales de aplicación para SharePoint/OneDrive corporativo.
+    Usa client_credentials — no requiere login de usuario ni refresh token."""
+
+    def __init__(self, client_id: str, client_secret: str):
+        self._client_id     = client_id.strip()
+        self._client_secret = client_secret.strip()
+        self._token_url     = f"https://login.microsoftonline.com/{NEXUS_TENANT}/oauth2/v2.0/token"
+        self._access_token  = None
+        self._renovar_token()
+
+    def _renovar_token(self):
+        resp = requests.post(self._token_url, data={
+            "client_id":     self._client_id,
+            "client_secret": self._client_secret,
+            "grant_type":    "client_credentials",
+            "scope":         "https://graph.microsoft.com/.default",
+        })
+        data = resp.json()
+        if "access_token" not in data:
+            raise RuntimeError(f"Error al obtener token de app: {data}")
+        self._access_token = data["access_token"]
+
+    def _get(self, url: str, **kwargs) -> requests.Response:
+        headers = {"Authorization": f"Bearer {self._access_token}"}
+        resp = requests.get(url, headers=headers, **kwargs)
+        if resp.status_code == 401:
+            self._renovar_token()
+            headers["Authorization"] = f"Bearer {self._access_token}"
+            resp = requests.get(url, headers=headers, **kwargs)
+        return resp
+
+    def leer_excel(self, user_upn: str, item_id: str, sheet_name: str) -> pd.DataFrame:
+        url  = f"{GRAPH_URL}/users/{user_upn}/drive/items/{item_id}/content"
+        resp = self._get(url)
+        resp.raise_for_status()
+        return pd.read_excel(io.BytesIO(resp.content), sheet_name=sheet_name)
 
 
 class OneDriveClient:
