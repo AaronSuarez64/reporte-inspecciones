@@ -58,11 +58,12 @@ def _get_client_fotos() -> OneDriveClient:
 
 @st.cache_resource
 def _get_client_excel() -> OneDriveClient:
-    """Cliente para el OneDrive/SharePoint del Excel."""
+    """Cliente para el OneDrive/SharePoint del Excel (cuenta corporativa)."""
     return OneDriveClient(
         client_id     = st.secrets["CLIENT_ID"],
         client_secret = st.secrets["CLIENT_SECRET"],
         refresh_token = st.secrets["REFRESH_TOKEN_EXCEL"],
+        authority     = "organizations",
     )
 
 @st.cache_data(ttl=3600)

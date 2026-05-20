@@ -4,21 +4,22 @@ import requests
 import pandas as pd
 
 GRAPH_URL = "https://graph.microsoft.com/v1.0"
-TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 
 
 class OneDriveClient:
     """Cliente para Microsoft Graph API con refresco automático de token."""
 
-    def __init__(self, client_id: str, client_secret: str, refresh_token: str):
+    def __init__(self, client_id: str, client_secret: str, refresh_token: str,
+                 authority: str = "common"):
         self._client_id     = client_id
         self._client_secret = client_secret
         self._refresh_token = refresh_token
+        self._token_url     = f"https://login.microsoftonline.com/{authority}/oauth2/v2.0/token"
         self._access_token  = None
         self._renovar_token()
 
     def _renovar_token(self):
-        resp = requests.post(TOKEN_URL, data={
+        resp = requests.post(self._token_url, data={
             "client_id":     self._client_id,
             "client_secret": self._client_secret,
             "refresh_token": self._refresh_token,
