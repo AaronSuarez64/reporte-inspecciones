@@ -167,11 +167,15 @@ _init_state()
 
 # Restauración desde localStorage (puede tardar 1–2 reruns por el componente async)
 if not st.session_state.get("_restored"):
-    raw = ls.getItem(STORAGE_KEY, key="_ls_load_state")
+    try:
+        raw = ls.getItem(STORAGE_KEY)
+    except Exception:
+        raw = None
+        st.session_state._restored = True  # si falla, seguimos sin persistencia
     if raw:
         _apply_state(raw)
         st.session_state._restored = True
-    else:
+    elif not st.session_state.get("_restored"):
         attempts = st.session_state.get("_restore_attempts", 0)
         st.session_state._restore_attempts = attempts + 1
         if attempts >= 2:
@@ -227,9 +231,12 @@ with st.expander("⚙️ Opciones"):
             if k in st.session_state:
                 del st.session_state[k]
         try:
-            ls.deleteItem(STORAGE_KEY, key="_ls_del_state")
+            ls.deleteItem(STORAGE_KEY)
         except Exception:
-            pass
+            try:
+                ls.setItem(STORAGE_KEY, "")
+            except Exception:
+                pass
         _init_state()
         st.success("Formulario limpiado.")
         st.rerun()
@@ -724,7 +731,7 @@ try:
     state_str = _serialize_state()
     new_hash = hashlib.md5(state_str.encode("utf-8")).hexdigest()
     if new_hash != st.session_state.get("_last_saved_hash"):
-        ls.setItem(STORAGE_KEY, state_str, key="_ls_save_state")
+        ls.setItem(STORAGE_KEY, state_str)
         st.session_state._last_saved_hash = new_hash
 except Exception:
     pass
