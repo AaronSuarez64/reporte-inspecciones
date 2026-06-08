@@ -292,15 +292,26 @@ with tab1:
 
     if st.session_state.datos_excel is not None:
         d = st.session_state.datos_excel
-        st.divider()
-        st.subheader("Datos del Siniestro")
-        col_a, col_b = st.columns(2)
-        col_a.metric("Número de Carpeta",   str(d["Nro_Carpeta"]))
-        col_b.metric("Número de Siniestro", str(d["Num_Siniestro"]))
-        st.text_input("Dirección ✏️ (editable)", key="dir_editada")
-        st.text_input("Comuna",           value=str(d["Comuna"]),    disabled=True)
-        st.text_input("Nombre Asegurado", value=str(d["Asegurado"]), disabled=True)
-        st.text_input("RUT Asegurado",    value=str(d["Rut"]),       disabled=True)
+        cols_requeridas = ["Nro_Carpeta", "Num_Siniestro", "Dirección Riesgo Asegurado",
+                           "Comuna", "Asegurado", "Rut"]
+        faltan = [c for c in cols_requeridas if c not in d.index]
+        if faltan:
+            st.warning(
+                f"Los datos guardados están desactualizados (faltan columnas: {', '.join(faltan)}). "
+                "Por favor vuelve a buscar el asegurado."
+            )
+            st.session_state.datos_excel = None
+            st.session_state.dir_editada = ""
+        else:
+            st.divider()
+            st.subheader("Datos del Siniestro")
+            col_a, col_b = st.columns(2)
+            col_a.metric("Número de Carpeta",   str(d["Nro_Carpeta"]))
+            col_b.metric("Número de Siniestro", str(d["Num_Siniestro"]))
+            st.text_input("Dirección ✏️ (editable)", key="dir_editada")
+            st.text_input("Comuna",           value=str(d["Comuna"]),    disabled=True)
+            st.text_input("Nombre Asegurado", value=str(d["Asegurado"]), disabled=True)
+            st.text_input("RUT Asegurado",    value=str(d["Rut"]),       disabled=True)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # PESTAÑA 2 – Detalle de la Visita
