@@ -202,7 +202,7 @@ def _get_client_excel() -> SharePointAppClient:
         client_secret = st.secrets["CLIENT_SECRET"],
     )
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def _cargar_excel(item_id: str) -> pd.DataFrame:
     return _get_client_excel().leer_excel(
         st.secrets["EXCEL_USER"], item_id, "Nexus"
@@ -221,10 +221,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ── Opciones (limpiar formulario) ───────────────────────────────────────────
+# ── Opciones (limpiar formulario / recargar Excel) ──────────────────────────
 with st.expander("⚙️ Opciones"):
-    st.caption("Tu progreso se guarda automáticamente en este navegador. Si quieres empezar de cero, usa el botón.")
-    if st.button("🗑️ Limpiar todo el formulario", type="secondary"):
+    st.caption("Tu progreso se guarda automáticamente en este navegador.")
+    col_op1, col_op2 = st.columns(2)
+    if col_op1.button("🗑️ Limpiar todo el formulario", type="secondary", use_container_width=True):
         for k in PERSIST_KEYS + ["edit_insp_idx", "edit_dano_idx", "edit_dano_item",
                                   "edit_obs_idx", "docx_bytes", "nombre_archivo",
                                   "_last_saved_hash"]:
@@ -240,6 +241,10 @@ with st.expander("⚙️ Opciones"):
         _init_state()
         st.success("Formulario limpiado.")
         st.rerun()
+    if col_op2.button("🔄 Recargar Excel desde OneDrive", type="secondary", use_container_width=True,
+                      help="Úsalo si cambiaste algo en el Excel y la app sigue mostrando datos viejos."):
+        _cargar_excel.clear()
+        st.success("Cache del Excel limpiado. La próxima búsqueda traerá datos frescos.")
 
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
@@ -297,11 +302,12 @@ with tab1:
         faltan = [c for c in cols_requeridas if c not in d.index]
         if faltan:
             st.warning(
-                f"Los datos guardados están desactualizados (faltan columnas: {', '.join(faltan)}). "
-                "Por favor vuelve a buscar el asegurado."
+                f"Los datos están desactualizados (faltan columnas: {', '.join(faltan)}). "
+                "Limpiando cache del Excel y borrando datos guardados. Por favor vuelve a buscar."
             )
             st.session_state.datos_excel = None
             st.session_state.dir_editada = ""
+            _cargar_excel.clear()
         else:
             st.divider()
             st.subheader("Datos del Siniestro")
