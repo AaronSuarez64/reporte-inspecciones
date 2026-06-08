@@ -585,19 +585,28 @@ with tab4:
                     })
                     st.rerun()
 
-        zona_lista = st.session_state.get("nueva_zona_nombre", "").strip()
-        if st.button("✓ Crear zona", type="primary", use_container_width=True,
-                     disabled=not zona_lista):
-            grupos.append({
-                "zona":      zona_lista,
-                "ubicacion": st.session_state.get("nueva_zona_ubic", "").strip(),
+        def _crear_zona_callback():
+            nombre = st.session_state.get("nueva_zona_nombre", "").strip()
+            if not nombre:
+                return
+            ubic = st.session_state.get("nueva_zona_ubic", "").strip()
+            grupos_cb = st.session_state.danos_grupos
+            grupos_cb.append({
+                "zona":      nombre,
+                "ubicacion": ubic,
                 "items":     [it.copy() for it in st.session_state.nueva_zona_items],
             })
-            st.session_state.danos_grupos       = grupos
+            st.session_state.danos_grupos       = grupos_cb
             st.session_state.nueva_zona_items   = []
+            # Dentro de un callback sí podemos reasignar widget keys
             st.session_state.nueva_zona_nombre  = ""
             st.session_state.nueva_zona_ubic    = ""
-            st.rerun()
+
+        zona_lista = st.session_state.get("nueva_zona_nombre", "").strip()
+        st.button(
+            "✓ Crear zona", type="primary", use_container_width=True,
+            disabled=not zona_lista, on_click=_crear_zona_callback,
+        )
 
         if not zona_lista:
             st.caption("ℹ️ Ingresa el nombre de la zona para habilitar la creación.")
