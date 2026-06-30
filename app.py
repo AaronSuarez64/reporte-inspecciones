@@ -29,7 +29,7 @@ def _normalizar_imagen(buf: io.BytesIO) -> io.BytesIO:
 st.set_page_config(
     page_title="Generador de Informes de Siniestro",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ── CSS: mobile-friendly + textarea wrap ─────────────────────────────────────

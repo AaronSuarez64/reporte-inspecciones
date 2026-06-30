@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="Visita Técnica",
     page_icon="📋",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="auto",
 )
 
 # ── CSS mobile-friendly (mismo del app principal) ───────────────────────────
