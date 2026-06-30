@@ -1,3 +1,5 @@
+import os
+import glob
 import streamlit as st
 import pandas as pd
 from drive_utils import SharePointAppClient
@@ -34,7 +36,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-TEMPLATE_PATH = "FormatoVisitaTecnica/Formato para Visita técnica.docx"
+def _encontrar_template() -> str:
+    """Busca el .docx de la plantilla dentro de FormatoVisitaTecnica/.
+    Es robusto a cualquier variación del nombre (acentos, mayúsculas, etc.)."""
+    folder = "FormatoVisitaTecnica"
+    if not os.path.isdir(folder):
+        raise FileNotFoundError(f"No existe la carpeta '{folder}' en el repo.")
+    docs = [p for p in glob.glob(os.path.join(folder, "*.docx"))
+            if not os.path.basename(p).startswith("~$")]
+    if not docs:
+        raise FileNotFoundError(f"No hay archivos .docx en '{folder}'.")
+    return docs[0]
 
 
 # ── Cliente del Excel (mismo patrón que el app principal) ───────────────────
@@ -101,7 +113,7 @@ if submit:
                         )
                         _cargar_excel.clear()
                     else:
-                        doc_buf = llenar_visita(TEMPLATE_PATH, datos, telefono.strip())
+                        doc_buf = llenar_visita(_encontrar_template(), datos, telefono.strip())
                         st.session_state["visita_buf"]    = doc_buf.getvalue()
                         st.session_state["visita_nombre"] = f"Visita Tecnica {datos['Nro_Carpeta']}.docx"
                         st.session_state["visita_asegurado"] = str(datos["Asegurado"])
