@@ -121,14 +121,38 @@ def _serialize_state() -> str:
     state = {}
     for k in PERSIST_KEYS:
         v = st.session_state.get(k)
-        if v is None or v == "" or v == [] or v == {}:
-            continue
+        # El chequeo de Series debe ir PRIMERO: comparar una Series con ""
+        # lanza ValueError ("truth value is ambiguous") y mataba el guardado
+        # completo apenas se cargaba un asegurado.
         if isinstance(v, pd.Series):
             state[k] = {"__type__": "Series",
                         "data": {kk: (None if pd.isna(vv) else vv) for kk, vv in v.to_dict().items()}}
-        else:
-            state[k] = v
+            continue
+        if v is None or v == "" or v == [] or v == {}:
+            continue
+        state[k] = v
     return json.dumps(state, default=str)
+
+
+# Claves que representan trabajo real del inspector (no configuración).
+# Se usan para decidir si hay algo que valga la pena guardar o proteger.
+CONTENT_KEYS = [
+    "datos_excel", "dir_editada", "detalle_visita", "detecciones",
+    "danos_grupos", "observaciones", "nueva_zona_items",
+    "nueva_zona_nombre", "nueva_zona_ubic",
+]
+
+
+def _hay_contenido() -> bool:
+    """True si el inspector tiene trabajo ingresado en esta sesión."""
+    for k in CONTENT_KEYS:
+        v = st.session_state.get(k)
+        if isinstance(v, pd.Series):
+            return True
+        if v is None or v == "" or v == []:
+            continue
+        return True
+    return False
 
 
 def _apply_state(raw: str):
@@ -174,30 +198,39 @@ def _init_state():
 _init_state()
 
 
-# Restauración desde localStorage (puede tardar 1–2 reruns por el componente async)
+# Restauración desde localStorage. El componente getItem es asíncrono, así
+# que se mantiene montado en TODOS los reruns: su valor puede llegar en
+# cualquier momento, incluso después del timeout inicial (señal lenta).
+_raw_guardado = None
+try:
+    _raw_guardado = ls.getItem(STORAGE_KEY)
+except Exception:
+    st.session_state._restored = True  # sin persistencia, pero la app sigue
+
 if not st.session_state.get("_restored"):
-    try:
-        raw = ls.getItem(STORAGE_KEY)
-    except Exception:
-        raw = None
-        st.session_state._restored = True  # si falla, seguimos sin persistencia
-    if raw:
-        _apply_state(raw)
+    if _raw_guardado:
+        _apply_state(_raw_guardado)
+        st.session_state._state_applied = True
         st.session_state._restored = True
-    elif not st.session_state.get("_restored"):
+    else:
         attempts = st.session_state.get("_restore_attempts", 0)
         st.session_state._restore_attempts = attempts + 1
-        # En móviles con conexión lenta el componente tarda varios reruns
-        # en responder; los inspectores trabajan a veces en periferia con
-        # señal lenta, así que esperamos hasta ~4s. La espera completa solo
-        # la paga quien no tiene datos guardados (el componente no distingue
-        # "sin datos" de "aún no responde"); con datos, termina al recibirlos.
+        # Esperamos hasta ~4s (señal lenta en periferia). La espera completa
+        # solo la paga quien no tiene datos guardados; con datos, la carga
+        # termina apenas el navegador responde.
         if attempts >= 8:
             st.session_state._restored = True
         else:
             with st.spinner("⏳ Cargando datos guardados…"):
                 time.sleep(0.5)
             st.rerun()
+elif (_raw_guardado
+      and not st.session_state.get("_state_applied")
+      and not _hay_contenido()):
+    # El valor llegó DESPUÉS del timeout y el inspector aún no escribe nada:
+    # todavía podemos restaurar sin pisar trabajo nuevo.
+    _apply_state(_raw_guardado)
+    st.session_state._state_applied = True
 
 
 # ── Clientes OneDrive cacheados ──────────────────────────────────────────────
@@ -271,8 +304,14 @@ with st.expander("⚙️ Opciones"):
             except Exception:
                 pass
         _init_state()
+        # Bloquea que el getItem (que aún recuerda el valor viejo) re-aplique
+        # los datos recién borrados.
+        st.session_state._state_applied = True
         st.success("Formulario limpiado.")
-        st.rerun()
+        # OJO: sin st.rerun() aquí — un rerun inmediato desmontaría el
+        # componente deleteItem antes de que el navegador ejecute el borrado.
+        # Los widgets aún no se renderizan en este punto, así que la página
+        # ya se dibuja limpia en este mismo run.
     if col_op2.button("🔄 Recargar Excel desde OneDrive", type="secondary", use_container_width=True,
                       help="Úsalo si cambiaste algo en el Excel y la app sigue mostrando datos viejos."):
         _cargar_excel.clear()
@@ -847,19 +886,23 @@ with tab6:
             use_container_width=True,
         )
 
-# ── Auto-guardado al final de cada render (con dedupe por hash) ─────────────
+# ── Auto-guardado al final de cada render ────────────────────────────────────
 # Reglas de seguridad:
 #   1. Nunca guardar antes de que la restauración haya terminado.
-#   2. Nunca escribir un estado vacío encima de lo que haya en localStorage
-#      (el borrado explícito lo maneja el botón "Limpiar formulario").
+#   2. Solo guardar cuando hay trabajo real del inspector (_hay_contenido);
+#      la configuración por defecto (checkboxes, modo de búsqueda) no cuenta,
+#      así un formulario "vacío" jamás pisa datos guardados.
+#   3. setItem se emite en CADA render (no solo cuando cambia el estado):
+#      el componente es asíncrono y si se emitiera una sola vez, un rerun
+#      rápido podría desmontarlo antes de que el navegador alcance a escribir.
+#      Reemitirlo lo mantiene montado y cada render reintenta la escritura.
 try:
-    if st.session_state.get("_restored"):
+    if st.session_state.get("_restored") and _hay_contenido():
         state_str = _serialize_state()
-        if state_str != "{}":
-            new_hash = hashlib.md5(state_str.encode("utf-8")).hexdigest()
-            if new_hash != st.session_state.get("_last_saved_hash"):
-                ls.setItem(STORAGE_KEY, state_str)
-                st.session_state._last_saved_hash = new_hash
-                st.session_state._last_saved_at = time.strftime("%H:%M:%S")
+        ls.setItem(STORAGE_KEY, state_str)
+        new_hash = hashlib.md5(state_str.encode("utf-8")).hexdigest()
+        if new_hash != st.session_state.get("_last_saved_hash"):
+            st.session_state._last_saved_hash = new_hash
+            st.session_state._last_saved_at = time.strftime("%H:%M:%S")
 except Exception:
     pass
