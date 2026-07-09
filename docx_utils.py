@@ -5,8 +5,41 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from PIL import Image as PILImage
 
 LOGO_PATH = "logo.png"
+
+
+def _tamano_ajustado(img_buf: io.BytesIO, max_w: float, max_h: float):
+    """Calcula (width, height) en Inches para que la imagen quepa completa
+    dentro de la caja max_w × max_h (pulgadas) sin deformarse, sea vertical
+    u horizontal."""
+    try:
+        img_buf.seek(0)
+        with PILImage.open(img_buf) as im:
+            w_px, h_px = im.size
+        img_buf.seek(0)
+        aspecto = w_px / h_px
+    except Exception:
+        img_buf.seek(0)
+        return None, Inches(max_h)
+    if aspecto >= max_w / max_h:
+        return Inches(max_w), Inches(max_w / aspecto)
+    return Inches(max_h * aspecto), Inches(max_h)
+
+
+def _fijar_ancho_tabla(tbl, anchos_pulgadas: list):
+    """Fija el layout de la tabla y el ancho de cada columna para que
+    nunca se expanda más allá del margen de la página."""
+    tblPr = tbl._tbl.tblPr
+    layout = OxmlElement("w:tblLayout")
+    layout.set(qn("w:type"), "fixed")
+    tblPr.append(layout)
+    for col, ancho in zip(tbl.columns, anchos_pulgadas):
+        col.width = Inches(ancho)
+    for row in tbl.rows:
+        for cell, ancho in zip(row.cells, anchos_pulgadas):
+            cell.width = Inches(ancho)
 
 
 def _keep_con_siguiente(parrafo):
@@ -185,15 +218,20 @@ def generar_documento(
                 tbl.style = "Table Grid"
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
                 tbl.autofit = False
+                _fijar_ancho_tabla(tbl, [3.25, 3.25])
                 for j in range(2):
                     cell = tbl.rows[0].cells[j]
                     cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                    # Foto
+                    # Foto ajustada a la celda (vertical u horizontal)
                     p_img = cell.paragraphs[0]
                     p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     img_buf = imagenes_data[i + j]["bytes"]
                     img_buf.seek(0)
-                    p_img.add_run().add_picture(img_buf, height=Inches(3.2))
+                    w_img, h_img = _tamano_ajustado(img_buf, 3.0, 3.6)
+                    if w_img is not None:
+                        p_img.add_run().add_picture(img_buf, width=w_img, height=h_img)
+                    else:
+                        p_img.add_run().add_picture(img_buf, height=h_img)
                     # Pie de foto en la misma celda
                     desc = imagenes_data[i + j]["descripcion"].replace("_", " ").capitalize()
                     p_cap = cell.add_paragraph()
@@ -205,14 +243,19 @@ def generar_documento(
                 tbl.style = "Table Grid"
                 tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
                 tbl.autofit = False
+                _fijar_ancho_tabla(tbl, [6.5])
                 cell = tbl.rows[0].cells[0]
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-                # Foto
+                # Foto ajustada a la celda (vertical u horizontal)
                 p_img = cell.paragraphs[0]
                 p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 img_buf = imagenes_data[i]["bytes"]
                 img_buf.seek(0)
-                p_img.add_run().add_picture(img_buf, height=Inches(4.0))
+                w_img, h_img = _tamano_ajustado(img_buf, 6.0, 4.2)
+                if w_img is not None:
+                    p_img.add_run().add_picture(img_buf, width=w_img, height=h_img)
+                else:
+                    p_img.add_run().add_picture(img_buf, height=h_img)
                 # Pie de foto en la misma celda
                 desc = imagenes_data[i]["descripcion"].replace("_", " ").capitalize()
                 p_cap = cell.add_paragraph()

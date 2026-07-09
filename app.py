@@ -1,4 +1,5 @@
 import io
+import html
 import json
 import time
 import hashlib
@@ -14,11 +15,15 @@ def _normalizar_imagen(buf: io.BytesIO) -> io.BytesIO:
     Elimina EXIF problemáticos y convierte HEIC. Compatible con python-docx."""
     try:
         import pillow_heif
-        from PIL import Image
+        from PIL import Image, ImageOps
         pillow_heif.register_heif_opener()
         buf.seek(0)
         out = io.BytesIO()
-        Image.open(buf).convert("RGB").save(out, format="JPEG", quality=90)
+        img = Image.open(buf)
+        # Aplica la rotación EXIF (fotos verticales de celular) antes de
+        # descartar los metadatos; si no, quedan acostadas.
+        img = ImageOps.exif_transpose(img)
+        img.convert("RGB").save(out, format="JPEG", quality=90)
         out.seek(0)
         return out
     except Exception:
@@ -43,6 +48,9 @@ st.markdown("""
 }
 .stButton button, .stFormSubmitButton button, .stDownloadButton button {
     min-height: 44px !important;
+    min-width: 44px !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
     font-size: 15px !important;
 }
 /* Textareas: permitir crecer verticalmente, wrap del texto */
@@ -154,6 +162,7 @@ def _init_state():
         "docx_bytes":          None,
         "nombre_archivo":      None,
         "search_mode":         "RUT",
+        "multi_matches":       None,
         "nueva_zona_items":    [],
         "nueva_zona_nombre":   "",
         "nueva_zona_ubic":     "",
@@ -178,11 +187,16 @@ if not st.session_state.get("_restored"):
     elif not st.session_state.get("_restored"):
         attempts = st.session_state.get("_restore_attempts", 0)
         st.session_state._restore_attempts = attempts + 1
-        if attempts >= 2:
+        # En móviles con conexión lenta el componente tarda varios reruns
+        # en responder; los inspectores trabajan a veces en periferia con
+        # señal lenta, así que esperamos hasta ~4s. La espera completa solo
+        # la paga quien no tiene datos guardados (el componente no distingue
+        # "sin datos" de "aún no responde"); con datos, termina al recibirlos.
+        if attempts >= 8:
             st.session_state._restored = True
         else:
             with st.spinner("⏳ Cargando datos guardados…"):
-                time.sleep(0.4)
+                time.sleep(0.5)
             st.rerun()
 
 
@@ -209,6 +223,21 @@ def _cargar_excel(item_id: str) -> pd.DataFrame:
     )
 
 
+def _normalizar_rut(valor) -> str:
+    """Normaliza un RUT para comparar: sin puntos ni espacios, K mayúscula.
+    '6.817.145-8' y '6817145-8' quedan iguales."""
+    return str(valor).replace(".", "").replace(" ", "").strip().upper()
+
+
+def _normalizar_carpeta(valor) -> str:
+    """Normaliza un número de carpeta: quita espacios y el '.0' que aparece
+    cuando pandas lee la columna como decimal."""
+    s = str(valor).strip()
+    if s.endswith(".0"):
+        s = s[:-2]
+    return s
+
+
 # ── Encabezado ───────────────────────────────────────────────────────────────
 st.markdown(
     """
@@ -221,6 +250,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+if st.session_state.get("_last_saved_at"):
+    st.caption(f"💾 Progreso guardado automáticamente en este navegador (últ. {st.session_state._last_saved_at})")
+
 # ── Opciones (limpiar formulario / recargar Excel) ──────────────────────────
 with st.expander("⚙️ Opciones"):
     st.caption("Tu progreso se guarda automáticamente en este navegador.")
@@ -228,7 +260,7 @@ with st.expander("⚙️ Opciones"):
     if col_op1.button("🗑️ Limpiar todo el formulario", type="secondary", use_container_width=True):
         for k in PERSIST_KEYS + ["edit_insp_idx", "edit_dano_idx", "edit_dano_item",
                                   "edit_obs_idx", "docx_bytes", "nombre_archivo",
-                                  "_last_saved_hash"]:
+                                  "_last_saved_hash", "_search_input", "multi_matches"]:
             if k in st.session_state:
                 del st.session_state[k]
         try:
@@ -281,19 +313,41 @@ with tab1:
             df = _cargar_excel(st.secrets["EXCEL_ITEM_ID"])
             valor = busqueda_val.strip()
             if modo == "RUT":
-                fila = df[df["Rut"].astype(str).str.strip() == valor]
+                fila = df[df["Rut"].map(_normalizar_rut) == _normalizar_rut(valor)]
             else:
-                fila = df[df["Nro_Carpeta"].astype(str).str.strip() == valor]
+                fila = df[df["Nro_Carpeta"].map(_normalizar_carpeta) == _normalizar_carpeta(valor)]
 
+            st.session_state.multi_matches = None
             if fila.empty:
                 st.error(f"No se encontró asegurado con {modo}: {valor}")
                 st.session_state.datos_excel = None
-            else:
+            elif len(fila) == 1:
                 st.session_state.datos_excel = fila.iloc[0]
                 st.session_state.dir_editada = str(fila.iloc[0]["Dirección Riesgo Asegurado"])
                 st.success(f"Asegurado encontrado: **{st.session_state.datos_excel['Asegurado']}**")
+            else:
+                # Mismo RUT con varias carpetas: el inspector elige cuál
+                st.session_state.datos_excel = None
+                st.session_state.multi_matches = fila
         except Exception as e:
-            st.error(f"Error al conectar con OneDrive: {e}")
+            st.error("No se pudo conectar con OneDrive. Revisa tu conexión e intenta de nuevo.")
+            with st.expander("Detalle técnico"):
+                st.code(repr(e))
+
+    mm = st.session_state.get("multi_matches")
+    if mm is not None and st.session_state.datos_excel is None:
+        st.warning(f"Se encontraron **{len(mm)}** carpetas para esta búsqueda. Selecciona la correcta:")
+        for idx, row in mm.iterrows():
+            etiqueta = (
+                f"Carpeta {row.get('Nro_Carpeta', '—')} · "
+                f"Siniestro {row.get('Num_Siniestro', '—')} · "
+                f"{row.get('Dirección Riesgo Asegurado', '—')}"
+            )
+            if st.button(etiqueta, key=f"pick_match_{idx}", use_container_width=True):
+                st.session_state.datos_excel = row
+                st.session_state.dir_editada = str(row["Dirección Riesgo Asegurado"])
+                st.session_state.multi_matches = None
+                st.rerun()
 
     if st.session_state.datos_excel is not None:
         d = st.session_state.datos_excel
@@ -623,8 +677,10 @@ with tab5:
 
     for i, obs in enumerate(obs_lista):
         col_t, col_btns = st.columns([7, 3])
+        # html.escape: sin esto, un texto con "<" (ej: "grieta <5mm") se
+        # interpreta como etiqueta HTML y se corta lo que sigue.
         col_t.markdown(
-            f"<div class='obs-texto'><b>{i + 1}.</b> {obs}</div>",
+            f"<div class='obs-texto'><b>{i + 1}.</b> {html.escape(obs)}</div>",
             unsafe_allow_html=True,
         )
         bc1, bc2, bc3, bc4 = col_btns.columns(4)
@@ -693,6 +749,41 @@ with tab5:
 with tab6:
     st.subheader("Generar Reporte")
 
+    # ── Checklist del estado del informe ─────────────────────────────────
+    if st.session_state.datos_excel is not None:
+        st.markdown("✅ **Datos**: asegurado cargado")
+    else:
+        st.markdown("❌ **Datos**: falta buscar al asegurado (pestaña 1)")
+
+    if st.session_state.detalle_visita.strip():
+        st.markdown("✅ **Visita**: detalle ingresado")
+    else:
+        st.markdown("⚠️ **Visita**: sin detalle — la sección saldrá vacía")
+
+    if st.session_state.hay_deteccion:
+        n_det = len(st.session_state.detecciones)
+        if n_det:
+            st.markdown(f"✅ **Detección**: {n_det} metodología(s)")
+        else:
+            st.markdown("⚠️ **Detección**: marcada pero sin metodologías agregadas")
+    else:
+        st.markdown("➖ **Detección**: no aplica")
+
+    if st.session_state.sin_danos:
+        st.markdown("✅ **Daños**: se indicará «sin daños en el inmueble»")
+    elif st.session_state.danos_grupos:
+        st.markdown(f"✅ **Daños**: {len(st.session_state.danos_grupos)} zona(s)")
+    else:
+        st.markdown("⚠️ **Daños**: sin zonas agregadas y casilla «sin daños» no marcada")
+
+    n_obs = len(st.session_state.observaciones)
+    if n_obs:
+        st.markdown(f"✅ **Observaciones**: {n_obs}")
+    else:
+        st.markdown("⚠️ **Observaciones**: ninguna")
+
+    st.divider()
+
     if st.button("Generar Reporte ▶", type="primary", use_container_width=True):
         if st.session_state.datos_excel is None:
             st.error("Primero busque un asegurado por RUT o Número de Carpeta (pestaña 1).")
@@ -740,8 +831,12 @@ with tab6:
                     st.success("Reporte generado.")
                 except Exception as e:
                     import traceback
-                    st.error(f"Error al generar el documento: {repr(e)}")
-                    st.code(traceback.format_exc())
+                    st.error(
+                        "No se pudo generar el documento. Intenta de nuevo; "
+                        "si el problema persiste, avisa al administrador."
+                    )
+                    with st.expander("Detalle técnico (para soporte)"):
+                        st.code(traceback.format_exc())
 
     if st.session_state.docx_bytes is not None:
         st.download_button(
@@ -753,11 +848,18 @@ with tab6:
         )
 
 # ── Auto-guardado al final de cada render (con dedupe por hash) ─────────────
+# Reglas de seguridad:
+#   1. Nunca guardar antes de que la restauración haya terminado.
+#   2. Nunca escribir un estado vacío encima de lo que haya en localStorage
+#      (el borrado explícito lo maneja el botón "Limpiar formulario").
 try:
-    state_str = _serialize_state()
-    new_hash = hashlib.md5(state_str.encode("utf-8")).hexdigest()
-    if new_hash != st.session_state.get("_last_saved_hash"):
-        ls.setItem(STORAGE_KEY, state_str)
-        st.session_state._last_saved_hash = new_hash
+    if st.session_state.get("_restored"):
+        state_str = _serialize_state()
+        if state_str != "{}":
+            new_hash = hashlib.md5(state_str.encode("utf-8")).hexdigest()
+            if new_hash != st.session_state.get("_last_saved_hash"):
+                ls.setItem(STORAGE_KEY, state_str)
+                st.session_state._last_saved_hash = new_hash
+                st.session_state._last_saved_at = time.strftime("%H:%M:%S")
 except Exception:
     pass
