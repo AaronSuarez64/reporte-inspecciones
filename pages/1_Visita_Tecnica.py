@@ -92,7 +92,7 @@ def _normalizar_carpeta(valor) -> str:
 
 
 COLS_REQUERIDAS = ["Nro_Carpeta", "Num_Siniestro", "Dirección Riesgo Asegurado",
-                   "Asegurado", "Rut"]
+                   "Comuna", "Asegurado", "Rut"]
 
 
 def _generar(datos, telefono: str):
