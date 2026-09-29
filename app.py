@@ -3,6 +3,7 @@ import html
 import json
 import time
 import hashlib
+import re
 import streamlit as st
 import pandas as pd
 from streamlit_local_storage import LocalStorage
@@ -260,6 +261,24 @@ def _normalizar_rut(valor) -> str:
     """Normaliza un RUT para comparar: sin puntos ni espacios, K mayúscula.
     '6.817.145-8' y '6817145-8' quedan iguales."""
     return str(valor).replace(".", "").replace(" ", "").strip().upper()
+
+
+# Viñetas / numeraciones que pueden venir al inicio de cada línea pegada:
+# •, ◦, ▪, -, –, —, *, ·, ✓, "1.", "1)", "a)", "(1)"
+_PREFIJO_VINETA = re.compile(
+    r"^\s*(?:[•◦▪▫●○■□‣⁃∙·\-–—*✓✔➢➤►>]+|\(?\d{1,3}[.)](?=\s)|\(?[a-zA-Z][.)](?=\s))\s*"
+)
+
+
+def _separar_observaciones(texto: str) -> list:
+    """Convierte un bloque pegado en una lista de observaciones: una por línea
+    no vacía, en el mismo orden, quitando viñetas o numeración inicial."""
+    salida = []
+    for linea in texto.splitlines():
+        limpia = _PREFIJO_VINETA.sub("", linea, count=1).strip()
+        if limpia:
+            salida.append(limpia)
+    return salida
 
 
 def _normalizar_carpeta(valor) -> str:
@@ -768,6 +787,40 @@ with tab5:
                 st.rerun()
 
     st.divider()
+    # ── Pegado masivo: una observación por línea ─────────────────────────
+    with st.expander("📋 Pegar varias observaciones de una vez", expanded=not obs_lista):
+        st.caption(
+            "Pega el texto completo (por ejemplo, lo que te entregó otra IA al leer el croquis). "
+            "Cada línea se convierte en una observación, en el mismo orden. "
+            "Las líneas vacías se ignoran y se quitan viñetas o numeración al inicio."
+        )
+        with st.form("form_obs_masivo", clear_on_submit=True):
+            bloque = st.text_area(
+                "Observaciones pegadas",
+                label_visibility="collapsed",
+                placeholder="Una observación por línea...",
+                height=220,
+            )
+            reemplazar = st.checkbox(
+                "Reemplazar las observaciones actuales (si no, se agregan al final)",
+                value=False,
+            )
+            if st.form_submit_button("+ Agregar todas", type="primary", use_container_width=True):
+                nuevas = _separar_observaciones(bloque)
+                if nuevas:
+                    if reemplazar:
+                        obs_lista = []
+                    obs_lista.extend(nuevas)
+                    st.session_state.observaciones = obs_lista
+                    st.session_state.edit_obs_idx = None
+                    st.session_state._msg_obs = f"Se agregaron {len(nuevas)} observaciones."
+                    st.rerun()
+                else:
+                    st.warning("No se detectó ninguna línea con texto.")
+
+    if st.session_state.get("_msg_obs"):
+        st.success(st.session_state.pop("_msg_obs"))
+
     # Nueva observación con text_area (multilínea)
     with st.form("form_obs", clear_on_submit=True):
         nueva_obs = st.text_area(

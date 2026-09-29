@@ -42,6 +42,13 @@ def _fijar_ancho_tabla(tbl, anchos_pulgadas: list):
             cell.width = Inches(ancho)
 
 
+def _formatear_desc(desc: str) -> str:
+    """'baño_TV' -> 'Baño TV': guiones bajos a espacios y solo la primera
+    letra en mayúscula, sin tocar el resto (capitalize() lo pasaba a minúscula)."""
+    d = desc.replace("_", " ").strip()
+    return d[:1].upper() + d[1:]
+
+
 def _keep_con_siguiente(parrafo):
     """Evita que el párrafo quede solo al final de una página (Keep with next)."""
     pPr = parrafo._p.get_or_add_pPr()
@@ -233,7 +240,7 @@ def generar_documento(
                     else:
                         p_img.add_run().add_picture(img_buf, height=h_img)
                     # Pie de foto en la misma celda
-                    desc = imagenes_data[i + j]["descripcion"].replace("_", " ").capitalize()
+                    desc = _formatear_desc(imagenes_data[i + j]["descripcion"])
                     p_cap = cell.add_paragraph()
                     p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     p_cap.add_run(f"Imagen {i + j + 1}: {desc}").italic = True
@@ -257,7 +264,7 @@ def generar_documento(
                 else:
                     p_img.add_run().add_picture(img_buf, height=h_img)
                 # Pie de foto en la misma celda
-                desc = imagenes_data[i]["descripcion"].replace("_", " ").capitalize()
+                desc = _formatear_desc(imagenes_data[i]["descripcion"])
                 p_cap = cell.add_paragraph()
                 p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p_cap.add_run(f"Imagen {i + 1}: {desc}").italic = True

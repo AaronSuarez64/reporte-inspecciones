@@ -76,50 +76,96 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.caption("Ingresa el RUT del asegurado y su teléfono. El resto se completa automáticamente desde el Excel.")
+st.caption("Busca al asegurado por RUT o N° de carpeta e ingresa su teléfono. "
+           "El resto se completa automáticamente desde el Excel.")
+
+
+def _normalizar_rut(valor) -> str:
+    """'6.817.145-8' y '6817145-8' quedan iguales (sin puntos/espacios, K mayúscula)."""
+    return str(valor).replace(".", "").replace(" ", "").strip().upper()
+
+
+def _normalizar_carpeta(valor) -> str:
+    """Quita espacios y el '.0' que aparece cuando pandas lee la columna como decimal."""
+    s = str(valor).strip()
+    return s[:-2] if s.endswith(".0") else s
+
+
+COLS_REQUERIDAS = ["Nro_Carpeta", "Num_Siniestro", "Dirección Riesgo Asegurado",
+                   "Asegurado", "Rut"]
+
+
+def _generar(datos, telefono: str):
+    faltan = [c for c in COLS_REQUERIDAS if c not in datos.index]
+    if faltan:
+        st.warning(
+            f"Faltan columnas en el Excel: {', '.join(faltan)}. "
+            "Recargando cache para el próximo intento."
+        )
+        _cargar_excel.clear()
+        return
+    doc_buf = llenar_visita(_encontrar_template(), datos, telefono)
+    st.session_state["visita_buf"]       = doc_buf.getvalue()
+    st.session_state["visita_nombre"]    = f"Visita Tecnica {_normalizar_carpeta(datos['Nro_Carpeta'])}.docx"
+    st.session_state["visita_asegurado"] = str(datos["Asegurado"])
+    st.session_state.pop("visita_matches", None)
 
 
 # ── Formulario ──────────────────────────────────────────────────────────────
+modo = st.radio("Buscar por:", ["RUT", "Número de Carpeta"], horizontal=True, key="visita_modo")
+
 with st.form("form_visita"):
     col1, col2 = st.columns(2)
-    rut = col1.text_input("RUT del asegurado", placeholder="ej: 6817145-8")
+    busqueda = col1.text_input(
+        modo, placeholder="ej: 6817145-8" if modo == "RUT" else "ej: 488308"
+    )
     telefono = col2.text_input("Teléfono", placeholder="ej: +56 9 1234 5678")
     submit = st.form_submit_button("Generar documento", type="primary", use_container_width=True)
 
 
 if submit:
-    if not rut.strip():
-        st.error("Por favor ingresa el RUT.")
+    st.session_state.pop("visita_buf", None)
+    st.session_state.pop("visita_matches", None)
+    if not busqueda.strip():
+        st.error(f"Por favor ingresa el {modo}.")
     elif not telefono.strip():
         st.error("Por favor ingresa el teléfono.")
     else:
         with st.spinner("Buscando en el Excel y generando documento…"):
             try:
                 df = _cargar_excel(st.secrets["EXCEL_ITEM_ID"])
-                fila = df[df["Rut"].astype(str).str.strip() == rut.strip()]
-                if fila.empty:
-                    st.error(f"No se encontró asegurado con RUT: {rut}")
-                    st.session_state.pop("visita_buf", None)
+                if modo == "RUT":
+                    fila = df[df["Rut"].map(_normalizar_rut) == _normalizar_rut(busqueda)]
                 else:
-                    datos = fila.iloc[0]
-                    cols_requeridas = ["Nro_Carpeta", "Num_Siniestro",
-                                       "Dirección Riesgo Asegurado",
-                                       "Asegurado", "Rut"]
-                    faltan = [c for c in cols_requeridas if c not in datos.index]
-                    if faltan:
-                        st.warning(
-                            f"Faltan columnas en el Excel: {', '.join(faltan)}. "
-                            "Recargando cache para el próximo intento."
-                        )
-                        _cargar_excel.clear()
-                    else:
-                        doc_buf = llenar_visita(_encontrar_template(), datos, telefono.strip())
-                        st.session_state["visita_buf"]    = doc_buf.getvalue()
-                        st.session_state["visita_nombre"] = f"Visita Tecnica {datos['Nro_Carpeta']}.docx"
-                        st.session_state["visita_asegurado"] = str(datos["Asegurado"])
+                    fila = df[df["Nro_Carpeta"].map(_normalizar_carpeta) == _normalizar_carpeta(busqueda)]
+
+                if fila.empty:
+                    st.error(f"No se encontró asegurado con {modo}: {busqueda.strip()}")
+                elif len(fila) == 1:
+                    _generar(fila.iloc[0], telefono.strip())
+                else:
+                    # Mismo RUT con varias carpetas: el inspector elige cuál
+                    st.session_state["visita_matches"] = fila
+                    st.session_state["visita_tel"]     = telefono.strip()
             except Exception as e:
                 st.error(f"Error al generar el documento: {e}")
-                st.session_state.pop("visita_buf", None)
+
+
+mm = st.session_state.get("visita_matches")
+if mm is not None:
+    st.warning(f"Se encontraron **{len(mm)}** carpetas para esta búsqueda. Selecciona la correcta:")
+    for idx, row in mm.iterrows():
+        etiqueta = (
+            f"Carpeta {_normalizar_carpeta(row.get('Nro_Carpeta', '—'))} · "
+            f"Siniestro {row.get('Num_Siniestro', '—')} · "
+            f"{row.get('Dirección Riesgo Asegurado', '—')}"
+        )
+        if st.button(etiqueta, key=f"visita_pick_{idx}", use_container_width=True):
+            try:
+                _generar(row, st.session_state.get("visita_tel", ""))
+            except Exception as e:
+                st.error(f"Error al generar el documento: {e}")
+            st.rerun()
 
 
 if st.session_state.get("visita_buf"):
